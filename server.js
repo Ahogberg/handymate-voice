@@ -15,7 +15,24 @@ app.get('/', (req, res) => {
 
 // 46elks webhook - incoming call notification
 app.post('/incoming-call', async (req, res) => {
-  console.log('📞 Incoming call:', req.body);
+  try {
+    console.log('📞 Incoming call:', req.body);
+    
+    const { callid, from, to } = req.body;
+    
+    // Simple response - just play a message
+    res.json({
+      play: "https://api.46elks.com/static/tts/sv_SE/Hej%20och%20välkommen%20till%20Elexperten.%20Tack%20för%20att%20du%20ringer.",
+      next: `${process.env.BASE_URL}/voice-stream?callid=${callid}&from=${encodeURIComponent(from || '')}`
+    });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.json({
+      play: "https://api.46elks.com/static/tts/sv_SE/Ett%20fel%20uppstod.%20Försök%20igen.",
+      hangup: true
+    });
+  }
+});
   
   const { callid, from, to, direction } = req.body;
   
