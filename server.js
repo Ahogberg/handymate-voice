@@ -18,20 +18,36 @@ app.post('/incoming-call', async (req, res) => {
   try {
     console.log('📞 Incoming call:', req.body);
     
-    const { callid, from, to } = req.body;
+    const { callid, from } = req.body;
     
-    // Simple response - just play a message
+    // Enkel TTS via 46elks
+    const message = "Hej och välkommen till Elexperten. Hur kan jag hjälpa dig?";
+    
+    console.log('📤 Responding with TTS');
+    
     res.json({
-      play: "https://api.46elks.com/static/tts/sv_SE/Hej%20och%20välkommen%20till%20Elexperten.%20Tack%20för%20att%20du%20ringer.",
-      next: `${process.env.BASE_URL}/voice-stream?callid=${callid}&from=${encodeURIComponent(from || '')}`
+      ivr: {
+        play: `https://api.46elks.com/static/tts/sv_SE/${encodeURIComponent(message)}`,
+        next: {
+          record: `${process.env.BASE_URL}/handle-recording?callid=${callid}&from=${encodeURIComponent(from || '')}`
+        }
+      }
     });
   } catch (error) {
     console.error('❌ Error:', error);
-    res.json({
-      play: "https://api.46elks.com/static/tts/sv_SE/Ett%20fel%20uppstod.%20Försök%20igen.",
-      hangup: true
-    });
+    res.status(500).json({ hangup: true });
   }
+});
+
+app.post('/handle-recording', async (req, res) => {
+  console.log('🎤 Recording received:', req.body);
+  console.log('Query:', req.query);
+  
+  // För nu, bara svara och lägg på
+  res.json({
+    play: `https://api.46elks.com/static/tts/sv_SE/${encodeURIComponent("Tack för ditt samtal. Hej då.")}`,
+    hangup: true
+  });
 });
   
   const { callid, from, to, direction } = req.body;
