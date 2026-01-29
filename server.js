@@ -27,7 +27,7 @@ app.get('/tts', async (req, res) => {
       process.env.AZURE_SPEECH_REGION
     );
     speechConfig.speechSynthesisVoiceName = 'sv-SE-SofieNeural';
-    speechConfig.speechSynthesisOutputFormat = sdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3;
+    speechConfig.speechSynthesisOutputFormat = sdk.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm;
     
     const synthesizer = new sdk.SpeechSynthesizer(speechConfig, null);
     
@@ -35,7 +35,7 @@ app.get('/tts', async (req, res) => {
       text,
       result => {
         if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-          res.set('Content-Type', 'audio/mpeg');
+          res.set('Content-Type', 'audio/wav');
           res.send(Buffer.from(result.audioData));
         } else {
           console.error('TTS Error:', result.errorDetails);
