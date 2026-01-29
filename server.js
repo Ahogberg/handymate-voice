@@ -60,7 +60,6 @@ app.get('/tts', async (req, res) => {
 });
 
 // Incoming call
-
 app.post('/incoming-call', async (req, res) => {
   console.log('📞 Incoming call:', req.body);
   const { callid, from } = req.body;
@@ -84,49 +83,63 @@ app.post('/incoming-call', async (req, res) => {
 // Listen for user input
 app.post('/listen', async (req, res) => {
   const { callid } = req.query;
-  const { result, recording } = req.body;
   
-  console.log('👂 Listen result:', req.body);
+  console.log('👂 Listen called:', req.body);
   
-  if (recording) {
-    // We have a recording - process it
-    console.log('🎤 Got recording:', recording);
+  // Tell 46elks to record
+  res.json({
+    record: {
+      url: `${process.env.BASE_URL}/handle-recording?callid=${callid}`,
+      timeout: 10,
+      silence: 3
+    }
+  });
+});
+
+// Handle the actual recording
+app.post('/handle-recording', async (req, res) => {
+  const { callid } = req.query;
+  const { recording } = req.body;
+  
+  console.log('🎤 Recording received:', req.body);
+  
+  if (!recording) {
+    console.log('❌ No recording URL');
+    res.json({
+      play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Jag hörde inte. Kan du upprepa?')}`,
+      next: `${process.env.BASE_URL}/listen?callid=${callid}`
+    });
+    return;
+  }
+  
+  try {
+    // Transcribe with Whisper
+    console.log('🔄 Transcribing...');
+    const transcription = await transcribeAudio(recording);
+    console.log('📝 User said:', transcription);
     
-    try {
-      // Download and transcribe with Whisper
-      const transcription = await transcribeAudio(recording);
-      console.log('📝 Transcription:', transcription);
-      
-      // Get Claude response
-      const response = await getChatResponse(callid, transcription);
-      console.log('🤖 Claude:', response);
-      
-      // Check if conversation should end
-      if (response.toLowerCase().includes('hej då')) {
-        res.json({
-          play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
-          next: `${process.env.BASE_URL}/hangup`
-        });
-      } else {
-        res.json({
-          play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
-          next: `${process.env.BASE_URL}/listen?callid=${callid}`
-        });
-      }
-    } catch (error) {
-      console.error('❌ Error:', error);
+    // Get Claude response
+    console.log('🤖 Asking Claude...');
+    const response = await getChatResponse(callid, transcription);
+    console.log('💬 Lisa says:', response);
+    
+    // Check if conversation should end
+    if (response.toLowerCase().includes('hej då')) {
       res.json({
-        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Ursäkta, något gick fel. Kan du upprepa?')}`,
+        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
+        next: `${process.env.BASE_URL}/hangup`
+      });
+    } else {
+      res.json({
+        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
         next: `${process.env.BASE_URL}/listen?callid=${callid}`
       });
     }
-  } else {
-    // No recording yet, wait for input
+  } catch (error) {
+    console.error('❌ Error:', error.message);
     res.json({
-      wait: {
-        seconds: 10,
-        next: `${process.env.BASE_URL}/listen?callid=${callid}`
-      }
+      play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Ursäkta, något gick fel. Hej då.')}`,
+      next: `${process.env.BASE_URL}/hangup`
     });
   }
 });
@@ -138,10 +151,7 @@ app.post('/hangup', (req, res) => {
 
 // Transcribe audio with Whisper
 async function transcribeAudio(audioUrl) {
-  const OpenAI = require('openai');
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  
-  // Download audio
+  // Download audio from 46elks
   const audioResponse = await axios.get(audioUrl, { 
     responseType: 'arraybuffer',
     auth: {
@@ -150,7 +160,7 @@ async function transcribeAudio(audioUrl) {
     }
   });
   
-  // Create form data
+  // Create form data for Whisper
   const formData = new FormData();
   formData.append('file', Buffer.from(audioResponse.data), {
     filename: 'audio.wav',
