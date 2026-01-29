@@ -23,7 +23,7 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Handymate Voice Agent' });
 });
 
-// Generate TTS audio
+// Generate TTS audio with SSML for natural speech
 app.get('/tts', async (req, res) => {
   const text = decodeURIComponent(req.query.text || 'Hej');
   console.log('🔊 TTS:', text);
@@ -33,13 +33,25 @@ app.get('/tts', async (req, res) => {
       process.env.AZURE_SPEECH_KEY,
       process.env.AZURE_SPEECH_REGION
     );
-    speechConfig.speechSynthesisVoiceName = 'sv-SE-SofieNeural';
     speechConfig.speechSynthesisOutputFormat = sdk.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm;
     
     const synthesizer = new sdk.SpeechSynthesizer(speechConfig, null);
     
-    synthesizer.speakTextAsync(
-      text,
+    // SSML för naturligare tal
+    const ssml = `
+      <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="sv-SE">
+        <voice name="sv-SE-SofieNeural">
+          <mstts:express-as style="friendly">
+            <prosody rate="-5%" pitch="+2%">
+              ${text}
+            </prosody>
+          </mstts:express-as>
+        </voice>
+      </speak>
+    `;
+    
+    synthesizer.speakSsmlAsync(
+      ssml,
       result => {
         if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
           res.set('Content-Type', 'audio/wav');
