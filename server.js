@@ -20,44 +20,21 @@ app.post('/incoming-call', async (req, res) => {
     
     console.log('📤 Responding with IVR');
     
-    const response = {
-      ivr: {
-        say: {
-          text: "Hej och välkommen till Elexperten. Hur kan jag hjälpa dig?",
-          voice: "Astrid"
-        },
-        next: `${process.env.BASE_URL}/handle-recording?callid=${callid}&from=${encodeURIComponent(from || '')}`
-      }
-    };
-    
-    console.log('Response:', JSON.stringify(response));
-    res.json(response);
+    // 46elks IVR format - ivr ska vara en URL till ljudfil
+    res.json({
+      ivr: "https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3",
+      next: `${process.env.BASE_URL}/handle-input?callid=${callid}&from=${encodeURIComponent(from || '')}`
+    });
   } catch (error) {
     console.error('❌ Error:', error);
     res.json({ hangup: true });
   }
 });
 
-// Handle recording from user
-app.post('/handle-recording', async (req, res) => {
-  console.log('🎤 Recording received:', req.body);
-  console.log('Query:', req.query);
-  
-  res.json({
-    ivr: {
-      say: {
-        text: "Tack för ditt samtal. Hej då.",
-        voice: "Astrid"
-      },
-      hangup: true
-    }
-  });
-});
-
-// 46elks call status webhook
-app.post('/call-status', (req, res) => {
-  console.log('📊 Call status:', req.body);
-  res.sendStatus(200);
+// Handle input
+app.post('/handle-input', async (req, res) => {
+  console.log('🎤 Input received:', req.body);
+  res.json({ hangup: true });
 });
 
 // Create HTTP server
@@ -67,5 +44,4 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Handymate Voice Agent running on port ${PORT}`);
-  console.log(`📞 Webhook URL: /incoming-call`);
 });
