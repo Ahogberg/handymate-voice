@@ -97,7 +97,7 @@ app.post('/listen', async (req, res) => {
 // Handle the actual recording
 app.post('/handle-recording', async (req, res) => {
   const { callid } = req.query;
-  const { recording } = req.body;
+  const recording = req.body.recording || req.body.wav;
   
   console.log('🎤 Recording received:', req.body);
   
