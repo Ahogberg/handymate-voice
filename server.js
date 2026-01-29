@@ -5,6 +5,14 @@ const sdk = require('microsoft-cognitiveservices-speech-sdk');
 const axios = require('axios');
 const FormData = require('form-data');
 
+// Pre-load Azure SDK
+console.log('🔧 Loading Azure Speech SDK...');
+const preloadConfig = sdk.SpeechConfig.fromSubscription(
+  process.env.AZURE_SPEECH_KEY,
+  process.env.AZURE_SPEECH_REGION
+);
+console.log('✅ Azure SDK ready');
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
