@@ -98,69 +98,52 @@ app.post('/incoming-call', async (req, res) => {
 // Listen for user input
 app.post('/listen', async (req, res) => {
   const { callid } = req.query;
+  const { wav } = req.body;
   
   console.log('👂 Listen called:', req.body);
   
-  res.json({
-    record: `${process.env.BASE_URL}/handle-recording?callid=${callid}`,
-    timeout: 10,
-    silence: 3
-  });
-});
-
-// Handle the actual recording
-app.post('/handle-recording', async (req, res) => {
-  const { callid } = req.query;
-  const recording = req.body.recording || req.body.wav;
-  
-  console.log('🎤 Recording received:', req.body);
-  
-  if (!recording) {
-    console.log('❌ No recording URL');
-    const reply = {
-      play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Jag hörde inte. Kan du upprepa?')}`,
-      next: `${process.env.BASE_URL}/listen?callid=${callid}`
-    };
-    console.log('📤 Sending reply:', JSON.stringify(reply));
-    res.json(reply);
-    return;
-  }
-  
-  try {
-    // Transcribe with Whisper
-    console.log('🔄 Transcribing...');
-    const transcription = await transcribeAudio(recording);
-    console.log('📝 User said:', transcription);
+  // Om vi har en inspelning, processa den
+  if (wav) {
+    console.log('🎤 Got recording:', wav);
     
-    // Get Claude response
-    console.log('🤖 Asking Claude...');
-    const response = await getChatResponse(callid, transcription);
-    console.log('💬 Lisa says:', response);
-    
-    // Check if conversation should end
-    if (response.toLowerCase().includes('hej då')) {
-      const reply = {
-        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
-        next: `${process.env.BASE_URL}/hangup`
-      };
-      console.log('📤 Sending reply:', JSON.stringify(reply));
-      res.json(reply);
-    } else {
-      const reply = {
-        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
+    try {
+      console.log('🔄 Transcribing...');
+      const transcription = await transcribeAudio(wav);
+      console.log('📝 User said:', transcription);
+      
+      console.log('🤖 Asking Claude...');
+      const response = await getChatResponse(callid, transcription);
+      console.log('💬 Lisa says:', response);
+      
+      if (response.toLowerCase().includes('hej då')) {
+        const reply = {
+          play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
+          next: `${process.env.BASE_URL}/hangup`
+        };
+        console.log('📤 Sending reply:', JSON.stringify(reply));
+        res.json(reply);
+      } else {
+        const reply = {
+          play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
+          next: `${process.env.BASE_URL}/listen?callid=${callid}`
+        };
+        console.log('📤 Sending reply:', JSON.stringify(reply));
+        res.json(reply);
+      }
+    } catch (error) {
+      console.error('❌ Error:', error.message);
+      res.json({
+        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Ursäkta, kan du upprepa?')}`,
         next: `${process.env.BASE_URL}/listen?callid=${callid}`
-      };
-      console.log('📤 Sending reply:', JSON.stringify(reply));
-      res.json(reply);
+      });
     }
-  } catch (error) {
-    console.error('❌ Error:', error.message);
-    const reply = {
-      play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Ursäkta, något gick fel. Hej då.')}`,
-      next: `${process.env.BASE_URL}/hangup`
-    };
-    console.log('📤 Sending reply:', JSON.stringify(reply));
-    res.json(reply);
+  } else {
+    // Ingen inspelning än - starta record
+    res.json({
+      record: `${process.env.BASE_URL}/listen?callid=${callid}`,
+      timeout: 10,
+      silence: 3
+    });
   }
 });
 
@@ -173,6 +156,7 @@ app.post('/hangup', (req, res) => {
 async function transcribeAudio(audioUrl) {
   const audioResponse = await axios.get(audioUrl, { 
     responseType: 'arraybuffer',
+    timeout: 5000,
     auth: {
       username: process.env.ELKS_API_USERNAME,
       password: process.env.ELKS_API_PASSWORD
@@ -191,6 +175,7 @@ async function transcribeAudio(audioUrl) {
     'https://api.openai.com/v1/audio/transcriptions',
     formData,
     {
+      timeout: 10000,
       headers: {
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         ...formData.getHeaders()
