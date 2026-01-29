@@ -32,10 +32,3 @@ app.post('/call-status', (req, res) => {
 http.createServer(app).listen(process.env.PORT || 3000, () => {
   console.log('🚀 Running on port', process.env.PORT || 3000);
 });
-```
-
----
-
-**Sen i 46elks**, sätt `voice_start` till:
-```
-https://handymate-voice-production.up.railway.app/incoming-call
