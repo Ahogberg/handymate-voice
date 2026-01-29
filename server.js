@@ -60,6 +60,7 @@ app.get('/tts', async (req, res) => {
 });
 
 // Incoming call
+
 app.post('/incoming-call', async (req, res) => {
   console.log('📞 Incoming call:', req.body);
   const { callid, from } = req.body;
@@ -71,11 +72,13 @@ app.post('/incoming-call', async (req, res) => {
   
   const greeting = encodeURIComponent('Hej och välkommen till Elexperten. Hur kan jag hjälpa dig?');
   
-  res.json({
+  const response = {
     play: `${process.env.BASE_URL}/tts?text=${greeting}`,
-    recordcall: true,
     next: `${process.env.BASE_URL}/listen?callid=${callid}`
-  });
+  };
+  
+  console.log('📤 Sending response:', JSON.stringify(response));
+  res.json(response);
 });
 
 // Listen for user input
