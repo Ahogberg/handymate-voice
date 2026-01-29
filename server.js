@@ -87,7 +87,6 @@ app.post('/listen', async (req, res) => {
   const start = Date.now();
   
   try {
-    // Transkribera
     const audio = await axios.get(wav, { 
       responseType: 'arraybuffer', 
       timeout: 4000,
@@ -107,7 +106,6 @@ app.post('/listen', async (req, res) => {
     const userText = transcript.data.text;
     console.log(`📝 "${userText}" (${Date.now()-start}ms)`);
     
-    // GPT svar
     const conv = conversations.get(callid) || { messages: [] };
     conv.messages.push({ role: 'user', content: userText });
     
@@ -146,9 +144,23 @@ app.post('/hangup', (req, res) => {
   console.log('📞 Hangup');
   res.json({ hangup: true });
 });
-{
-  "connect": "sip:+46766867337@sip.retellai.com"
-}
+
+app.post('/forward-to-retell', (req, res) => {
+  console.log('📞 Forwarding to Retell:', req.body);
+  res.json({
+    connect: 'sip:+46766867337@sip.retellai.com'
+  });
+});
+
 http.createServer(app).listen(process.env.PORT || 3000, () => {
   console.log('🚀 Running');
 });
+```
+
+---
+
+**Radera allt** → **Klistra in** → **Commit**
+
+Sen ändra 46elks `voice_start` till:
+```
+https://handymate-voice-production.up.railway.app/forward-to-retell
