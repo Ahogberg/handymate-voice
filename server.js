@@ -146,7 +146,9 @@ app.post('/hangup', (req, res) => {
   console.log('📞 Hangup');
   res.json({ hangup: true });
 });
-
+{
+  "connect": "sip:+46766867337@sip.retellai.com"
+}
 http.createServer(app).listen(process.env.PORT || 3000, () => {
   console.log('🚀 Running');
 });
