@@ -45,16 +45,19 @@ app.get('/tts', async (req, res) => {
           res.set('Content-Type', 'audio/wav');
           res.send(Buffer.from(result.audioData));
         } else {
+          console.error('❌ TTS failed:', result.errorDetails);
           res.status(500).send('TTS failed');
         }
         synthesizer.close();
       },
       error => {
+        console.error('❌ TTS error:', error);
         synthesizer.close();
         res.status(500).send('TTS failed');
       }
     );
   } catch (error) {
+    console.error('❌ TTS error:', error);
     res.status(500).send('TTS failed');
   }
 });
@@ -86,7 +89,6 @@ app.post('/listen', async (req, res) => {
   
   console.log('👂 Listen called:', req.body);
   
-  // Tell 46elks to record - record ska vara en URL
   res.json({
     record: `${process.env.BASE_URL}/handle-recording?callid=${callid}`,
     timeout: 10,
@@ -103,10 +105,12 @@ app.post('/handle-recording', async (req, res) => {
   
   if (!recording) {
     console.log('❌ No recording URL');
-    res.json({
+    const reply = {
       play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Jag hörde inte. Kan du upprepa?')}`,
       next: `${process.env.BASE_URL}/listen?callid=${callid}`
-    });
+    };
+    console.log('📤 Sending reply:', JSON.stringify(reply));
+    res.json(reply);
     return;
   }
   
@@ -123,22 +127,28 @@ app.post('/handle-recording', async (req, res) => {
     
     // Check if conversation should end
     if (response.toLowerCase().includes('hej då')) {
-      res.json({
+      const reply = {
         play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
         next: `${process.env.BASE_URL}/hangup`
-      });
+      };
+      console.log('📤 Sending reply:', JSON.stringify(reply));
+      res.json(reply);
     } else {
-      res.json({
+      const reply = {
         play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
         next: `${process.env.BASE_URL}/listen?callid=${callid}`
-      });
+      };
+      console.log('📤 Sending reply:', JSON.stringify(reply));
+      res.json(reply);
     }
   } catch (error) {
     console.error('❌ Error:', error.message);
-    res.json({
+    const reply = {
       play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Ursäkta, något gick fel. Hej då.')}`,
       next: `${process.env.BASE_URL}/hangup`
-    });
+    };
+    console.log('📤 Sending reply:', JSON.stringify(reply));
+    res.json(reply);
   }
 });
 
@@ -149,7 +159,6 @@ app.post('/hangup', (req, res) => {
 
 // Transcribe audio with Whisper
 async function transcribeAudio(audioUrl) {
-  // Download audio from 46elks
   const audioResponse = await axios.get(audioUrl, { 
     responseType: 'arraybuffer',
     auth: {
@@ -158,7 +167,6 @@ async function transcribeAudio(audioUrl) {
     }
   });
   
-  // Create form data for Whisper
   const formData = new FormData();
   formData.append('file', Buffer.from(audioResponse.data), {
     filename: 'audio.wav',
