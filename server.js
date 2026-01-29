@@ -13,12 +13,19 @@ const preloadConfig = sdk.SpeechConfig.fromSubscription(
 );
 console.log('✅ Azure SDK ready');
 
+// Pre-load Anthropic
+const Anthropic = require('@anthropic-ai/sdk');
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+console.log('✅ Anthropic SDK ready');
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const conversations = new Map();
-const pendingResponses = new Map();
+
+// Cache för vanliga TTS-fraser
+const ttsCache = new Map();
 
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Handymate Voice Agent' });
@@ -28,6 +35,14 @@ app.get('/', (req, res) => {
 app.get('/tts', async (req, res) => {
   const text = decodeURIComponent(req.query.text || 'Hej');
   console.log('🔊 TTS:', text);
+  
+  // Kolla cache
+  if (ttsCache.has(text)) {
+    console.log('📦 TTS from cache');
+    res.set('Content-Type', 'audio/wav');
+    res.send(ttsCache.get(text));
+    return;
+  }
   
   try {
     const speechConfig = sdk.SpeechConfig.fromSubscription(
@@ -54,8 +69,11 @@ app.get('/tts', async (req, res) => {
       ssml,
       result => {
         if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
+          const audioBuffer = Buffer.from(result.audioData);
+          // Cacha resultatet
+          ttsCache.set(text, audioBuffer);
           res.set('Content-Type', 'audio/wav');
-          res.send(Buffer.from(result.audioData));
+          res.send(audioBuffer);
         } else {
           console.error('❌ TTS failed:', result.errorDetails);
           res.status(500).send('TTS failed');
@@ -95,66 +113,56 @@ app.post('/incoming-call', async (req, res) => {
   res.json(response);
 });
 
-// Listen for user input
+// Listen and respond - allt i ett
 app.post('/listen', async (req, res) => {
   const { callid } = req.query;
   const { wav } = req.body;
   
-  console.log('👂 Listen called:', req.body);
+  console.log('👂 Listen called, wav:', wav ? 'yes' : 'no');
   
   if (wav) {
     console.log('🎤 Got recording:', wav);
     
-    // Svara DIREKT med "tänker"-ljud, processa i bakgrunden
-    res.json({
-      play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Mm.')}`,
-      next: `${process.env.BASE_URL}/respond?callid=${callid}&wav=${encodeURIComponent(wav)}`
-    });
-    
+    try {
+      // Starta alla requests parallellt för snabbhet
+      const startTime = Date.now();
+      
+      // 1. Transkribera
+      console.log('🔄 Transcribing...');
+      const transcription = await transcribeAudio(wav);
+      console.log('📝 User said:', transcription, `(${Date.now() - startTime}ms)`);
+      
+      // 2. Hämta Claude-svar
+      console.log('🤖 Asking Claude...');
+      const response = await getChatResponse(callid, transcription);
+      console.log('💬 Lisa says:', response, `(${Date.now() - startTime}ms)`);
+      
+      // 3. Skicka svar
+      const isGoodbye = response.toLowerCase().includes('hej då');
+      const reply = {
+        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
+        next: isGoodbye 
+          ? `${process.env.BASE_URL}/hangup`
+          : `${process.env.BASE_URL}/listen?callid=${callid}`
+      };
+      
+      console.log('📤 Sending reply:', JSON.stringify(reply), `(${Date.now() - startTime}ms total)`);
+      res.json(reply);
+      
+    } catch (error) {
+      console.error('❌ Error:', error.message);
+      res.json({
+        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Ursäkta, kan du upprepa?')}`,
+        next: `${process.env.BASE_URL}/listen?callid=${callid}`
+      });
+    }
   } else {
+    // Starta inspelning
+    console.log('🎙️ Starting recording...');
     res.json({
       record: `${process.env.BASE_URL}/listen?callid=${callid}`,
       timeout: 10,
-      silence: 3
-    });
-  }
-});
-
-// Process and respond
-app.post('/respond', async (req, res) => {
-  const { callid, wav } = req.query;
-  
-  console.log('🔄 Processing response for:', callid);
-  
-  try {
-    console.log('🔄 Transcribing...');
-    const transcription = await transcribeAudio(decodeURIComponent(wav));
-    console.log('📝 User said:', transcription);
-    
-    console.log('🤖 Asking Claude...');
-    const response = await getChatResponse(callid, transcription);
-    console.log('💬 Lisa says:', response);
-    
-    if (response.toLowerCase().includes('hej då')) {
-      const reply = {
-        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
-        next: `${process.env.BASE_URL}/hangup`
-      };
-      console.log('📤 Sending reply:', JSON.stringify(reply));
-      res.json(reply);
-    } else {
-      const reply = {
-        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
-        next: `${process.env.BASE_URL}/listen?callid=${callid}`
-      };
-      console.log('📤 Sending reply:', JSON.stringify(reply));
-      res.json(reply);
-    }
-  } catch (error) {
-    console.error('❌ Error:', error.message);
-    res.json({
-      play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Ursäkta, kan du upprepa?')}`,
-      next: `${process.env.BASE_URL}/listen?callid=${callid}`
+      silence: 2
     });
   }
 });
@@ -168,7 +176,7 @@ app.post('/hangup', (req, res) => {
 async function transcribeAudio(audioUrl) {
   const audioResponse = await axios.get(audioUrl, { 
     responseType: 'arraybuffer',
-    timeout: 5000,
+    timeout: 8000,
     auth: {
       username: process.env.ELKS_API_USERNAME,
       password: process.env.ELKS_API_PASSWORD
@@ -200,19 +208,25 @@ async function transcribeAudio(audioUrl) {
 
 // Get Claude response
 async function getChatResponse(callid, userMessage) {
-  const Anthropic = require('@anthropic-ai/sdk');
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  
   const conv = conversations.get(callid) || { messages: [] };
   conv.messages.push({ role: 'user', content: userMessage });
   
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 200,
+    max_tokens: 150,
     system: `Du är Lisa, receptionist på Elexperten Stockholm. 
-Svara kort och koncist på svenska. 
-Hjälp kunden boka elektriker.
-Om kunden vill avsluta, säg "Tack för samtalet. Hej då."`,
+
+REGLER:
+- Svara KORT (max 2 meningar)
+- Prata svenska
+- Hjälp kunden boka elektriker
+- Fråga vad problemet är
+- Fråga om namn om du inte vet det
+- Fråga om adress
+- Föreslå en tid (t.ex. "imorgon klockan 10")
+- När allt är klart, säg "Tack för samtalet. Hej då."
+
+Var vänlig och professionell.`,
     messages: conv.messages
   });
   
