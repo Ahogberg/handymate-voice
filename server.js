@@ -23,13 +23,10 @@ app.post('/incoming-call', async (req, res) => {
     
     console.log('📤 Responding with TTS');
     
+    // Enklare format utan ivr-wrapper
     res.json({
-      ivr: {
-        play: `https://api.46elks.com/static/tts/sv_SE/${encodeURIComponent(message)}`,
-        next: {
-          record: `${process.env.BASE_URL}/handle-recording?callid=${callid}&from=${encodeURIComponent(from || '')}`
-        }
-      }
+      play: `https://api.46elks.com/static/tts/sv_SE/${encodeURIComponent(message)}`,
+      next: `${process.env.BASE_URL}/handle-recording?callid=${callid}&from=${encodeURIComponent(from || '')}`
     });
   } catch (error) {
     console.error('❌ Error:', error);
