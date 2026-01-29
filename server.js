@@ -6,23 +6,20 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Handymate Voice Agent' });
 });
 
-// 46elks webhook - incoming call
 app.post('/incoming-call', async (req, res) => {
   try {
     console.log('📞 Incoming call:', req.body);
-    
     const { callid, from } = req.body;
     
-    console.log('📤 Responding with IVR');
+    // 46elks TTS URL format
+    const message = encodeURIComponent("Hej och välkommen till Elexperten. Vänligen lämna ett meddelande efter tonen.");
     
-    // 46elks IVR format - ivr ska vara en URL till ljudfil
     res.json({
-      ivr: "https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3",
+      ivr: `http://tts.api.46elks.com/sv_SE/${message}`,
       next: `${process.env.BASE_URL}/handle-input?callid=${callid}&from=${encodeURIComponent(from || '')}`
     });
   } catch (error) {
@@ -31,16 +28,21 @@ app.post('/incoming-call', async (req, res) => {
   }
 });
 
-// Handle input
 app.post('/handle-input', async (req, res) => {
   console.log('🎤 Input received:', req.body);
+  
+  const message = encodeURIComponent("Tack för ditt samtal. Hej då.");
+  res.json({
+    ivr: `http://tts.api.46elks.com/sv_SE/${message}`,
+    next: `${process.env.BASE_URL}/hangup`
+  });
+});
+
+app.post('/hangup', (req, res) => {
   res.json({ hangup: true });
 });
 
-// Create HTTP server
 const server = http.createServer(app);
-
-// Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Handymate Voice Agent running on port ${PORT}`);
