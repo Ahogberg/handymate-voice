@@ -1,27 +1,24 @@
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
-const path = require('path');
-const fs = require('fs');
+const sdk = require('microsoft-cognitiveservices-speech-sdk');
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static audio files
-app.use('/audio', express.static(path.join(__dirname, 'audio')));
+// Store conversations
+const conversations = new Map();
 
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Handymate Voice Agent' });
 });
 
-// Test TTS endpoint - generates audio on the fly
+// Generate TTS audio
 app.get('/tts', async (req, res) => {
-  const text = req.query.text || 'Hej och välkommen';
+  const text = req.query.text || 'Hej';
   
   try {
-    const sdk = require('microsoft-cognitiveservices-speech-sdk');
-    
     const speechConfig = sdk.SpeechConfig.fromSubscription(
       process.env.AZURE_SPEECH_KEY,
       process.env.AZURE_SPEECH_REGION
@@ -55,16 +52,23 @@ app.get('/tts', async (req, res) => {
   }
 });
 
+// Incoming call - greet and start recording
 app.post('/incoming-call', async (req, res) => {
   try {
     console.log('📞 Incoming call:', req.body);
     const { callid, from } = req.body;
     
-    const message = encodeURIComponent('Hej och välkommen till Elexperten. Hur kan jag hjälpa dig?');
+    // Initialize conversation
+    conversations.set(callid, {
+      from: from,
+      messages: [{ role: 'assistant', content: 'Hej och välkommen till Elexperten. Hur kan jag hjälpa dig?' }]
+    });
+    
+    const greeting = encodeURIComponent('Hej och välkommen till Elexperten. Hur kan jag hjälpa dig?');
     
     res.json({
-      ivr: `${process.env.BASE_URL}/tts?text=${message}`,
-      next: `${process.env.BASE_URL}/handle-input?callid=${callid}&from=${encodeURIComponent(from || '')}`
+      play: `${process.env.BASE_URL}/tts?text=${greeting}`,
+      next: `${process.env.BASE_URL}/record?callid=${callid}`
     });
   } catch (error) {
     console.error('❌ Error:', error);
@@ -72,17 +76,44 @@ app.post('/incoming-call', async (req, res) => {
   }
 });
 
-app.post('/handle-input', async (req, res) => {
-  console.log('🎤 Input received:', req.body);
+// Record user speech
+app.post('/record', async (req, res) => {
+  const { callid } = req.query;
+  console.log('🎙️ Starting recording for:', callid);
   
-  const message = encodeURIComponent('Tack för ditt samtal. Hej då.');
   res.json({
-    ivr: `${process.env.BASE_URL}/tts?text=${message}`,
-    next: `${process.env.BASE_URL}/hangup`
+    record: `${process.env.BASE_URL}/handle-recording?callid=${callid}`,
+    timeout: 5,
+    silence: 3
   });
 });
 
+// Handle recording - transcribe and respond
+app.post('/handle-recording', async (req, res) => {
+  const { callid } = req.query;
+  const { recording } = req.body;
+  
+  console.log('🎤 Recording received for:', callid);
+  console.log('Recording URL:', recording);
+  
+  try {
+    // For now, just acknowledge and hang up
+    // We'll add Whisper + Claude next
+    
+    const response = encodeURIComponent('Tack, jag hörde vad du sa. Vi arbetar på att koppla in AI-assistenten. Hej då!');
+    
+    res.json({
+      play: `${process.env.BASE_URL}/tts?text=${response}`,
+      next: `${process.env.BASE_URL}/hangup`
+    });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.json({ hangup: true });
+  }
+});
+
 app.post('/hangup', (req, res) => {
+  console.log('📞 Call ended');
   res.json({ hangup: true });
 });
 
