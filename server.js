@@ -13,14 +13,16 @@ app.get('/', (req, res) => {
 app.post('/incoming-call', (req, res) => {
   console.log('📞 Incoming call:', req.body);
   res.json({
-    connect: 'sip:+46766867337@sip.retellai.com'
+    connect: 'sip:sip.retellai.com',
+    callerid: '+46766867337'
   });
 });
 
 app.post('/forward-to-retell', (req, res) => {
   console.log('📞 Forwarding to Retell:', req.body);
   res.json({
-    connect: 'sip:+46766867337@sip.retellai.com'
+    connect: 'sip:sip.retellai.com',
+    callerid: '+46766867337'
   });
 });
 
