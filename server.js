@@ -18,13 +18,20 @@ app.post('/incoming-call', async (req, res) => {
     
     const { callid, from } = req.body;
     
-    console.log('📤 Responding with TTS');
+    console.log('📤 Responding with IVR');
     
-    res.json({
-      say: "Hej och välkommen till Elexperten. Hur kan jag hjälpa dig?",
-      voice: "Astrid",
-      next: `${process.env.BASE_URL}/handle-recording?callid=${callid}&from=${encodeURIComponent(from || '')}`
-    });
+    const response = {
+      ivr: {
+        say: {
+          text: "Hej och välkommen till Elexperten. Hur kan jag hjälpa dig?",
+          voice: "Astrid"
+        },
+        next: `${process.env.BASE_URL}/handle-recording?callid=${callid}&from=${encodeURIComponent(from || '')}`
+      }
+    };
+    
+    console.log('Response:', JSON.stringify(response));
+    res.json(response);
   } catch (error) {
     console.error('❌ Error:', error);
     res.json({ hangup: true });
@@ -37,9 +44,13 @@ app.post('/handle-recording', async (req, res) => {
   console.log('Query:', req.query);
   
   res.json({
-    say: "Tack för ditt samtal. Hej då.",
-    voice: "Astrid",
-    hangup: true
+    ivr: {
+      say: {
+        text: "Tack för ditt samtal. Hej då.",
+        voice: "Astrid"
+      },
+      hangup: true
+    }
   });
 });
 
