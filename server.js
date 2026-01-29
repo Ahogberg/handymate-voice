@@ -86,13 +86,11 @@ app.post('/listen', async (req, res) => {
   
   console.log('👂 Listen called:', req.body);
   
-  // Tell 46elks to record
+  // Tell 46elks to record - record ska vara en URL
   res.json({
-    record: {
-      url: `${process.env.BASE_URL}/handle-recording?callid=${callid}`,
-      timeout: 10,
-      silence: 3
-    }
+    record: `${process.env.BASE_URL}/handle-recording?callid=${callid}`,
+    timeout: 10,
+    silence: 3
   });
 });
 
