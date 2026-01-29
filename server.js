@@ -18,12 +18,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const conversations = new Map();
+const pendingResponses = new Map();
 
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Handymate Voice Agent' });
 });
 
-// Generate TTS audio with SSML for natural speech
+// Generate TTS audio with SSML
 app.get('/tts', async (req, res) => {
   const text = decodeURIComponent(req.query.text || 'Hej');
   console.log('🔊 TTS:', text);
@@ -37,7 +38,6 @@ app.get('/tts', async (req, res) => {
     
     const synthesizer = new sdk.SpeechSynthesizer(speechConfig, null);
     
-    // SSML för naturligare tal
     const ssml = `
       <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="sv-SE">
         <voice name="sv-SE-SofieNeural">
@@ -102,47 +102,59 @@ app.post('/listen', async (req, res) => {
   
   console.log('👂 Listen called:', req.body);
   
-  // Om vi har en inspelning, processa den
   if (wav) {
     console.log('🎤 Got recording:', wav);
     
-    try {
-      console.log('🔄 Transcribing...');
-      const transcription = await transcribeAudio(wav);
-      console.log('📝 User said:', transcription);
-      
-      console.log('🤖 Asking Claude...');
-      const response = await getChatResponse(callid, transcription);
-      console.log('💬 Lisa says:', response);
-      
-      if (response.toLowerCase().includes('hej då')) {
-        const reply = {
-          play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
-          next: `${process.env.BASE_URL}/hangup`
-        };
-        console.log('📤 Sending reply:', JSON.stringify(reply));
-        res.json(reply);
-      } else {
-        const reply = {
-          play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
-          next: `${process.env.BASE_URL}/listen?callid=${callid}`
-        };
-        console.log('📤 Sending reply:', JSON.stringify(reply));
-        res.json(reply);
-      }
-    } catch (error) {
-      console.error('❌ Error:', error.message);
-      res.json({
-        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Ursäkta, kan du upprepa?')}`,
-        next: `${process.env.BASE_URL}/listen?callid=${callid}`
-      });
-    }
+    // Svara DIREKT med "tänker"-ljud, processa i bakgrunden
+    res.json({
+      play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Mm.')}`,
+      next: `${process.env.BASE_URL}/respond?callid=${callid}&wav=${encodeURIComponent(wav)}`
+    });
+    
   } else {
-    // Ingen inspelning än - starta record
     res.json({
       record: `${process.env.BASE_URL}/listen?callid=${callid}`,
       timeout: 10,
       silence: 3
+    });
+  }
+});
+
+// Process and respond
+app.post('/respond', async (req, res) => {
+  const { callid, wav } = req.query;
+  
+  console.log('🔄 Processing response for:', callid);
+  
+  try {
+    console.log('🔄 Transcribing...');
+    const transcription = await transcribeAudio(decodeURIComponent(wav));
+    console.log('📝 User said:', transcription);
+    
+    console.log('🤖 Asking Claude...');
+    const response = await getChatResponse(callid, transcription);
+    console.log('💬 Lisa says:', response);
+    
+    if (response.toLowerCase().includes('hej då')) {
+      const reply = {
+        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
+        next: `${process.env.BASE_URL}/hangup`
+      };
+      console.log('📤 Sending reply:', JSON.stringify(reply));
+      res.json(reply);
+    } else {
+      const reply = {
+        play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent(response)}`,
+        next: `${process.env.BASE_URL}/listen?callid=${callid}`
+      };
+      console.log('📤 Sending reply:', JSON.stringify(reply));
+      res.json(reply);
+    }
+  } catch (error) {
+    console.error('❌ Error:', error.message);
+    res.json({
+      play: `${process.env.BASE_URL}/tts?text=${encodeURIComponent('Ursäkta, kan du upprepa?')}`,
+      next: `${process.env.BASE_URL}/listen?callid=${callid}`
     });
   }
 });
